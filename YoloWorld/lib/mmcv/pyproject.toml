@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools","wheel","torch"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mmcv"
+version = "2.1.0"
+
+[tool.setuptools]
+package-dir = {"mmcv" = "mmcv"}
+include-package-data = false
+zip-safe = true
+
+[tool.setuptools.packages.find]
+include = ["mmcv*"]

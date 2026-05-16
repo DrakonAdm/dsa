@@ -1,0 +1,59 @@
+services:
+  minio:
+    image: minio/minio:latest  # Официальный образ
+    container_name: minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"  # API endpoint
+      - "9001:9001"  # Console UI
+    volumes:
+      - minio-storage:/data
+      - minio-config:/root/.minio
+    environment:
+      - MINIO_ROOT_USER=miniouser
+      - MINIO_ROOT_PASSWORD=admin123
+      # для локального теста:
+      # - MINIO_BROWSER_REDIRECT_URL=https://seglabelai.com/console/
+      # - MINIO_DOMAIN=seglabelai.com
+      # - MINIO_SERVER_URL=https://seglabelai.com
+    command: server /data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 20s
+      retries: 3
+    networks:
+      - ai-net
+
+  # Инициализация бакетов, политик, CORS
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    environment:
+      - MINIO_ROOT_USER=${MINIO_ROOT_USER:-miniouser}
+      - MINIO_ROOT_PASSWORD=${MINIO_ROOT_PASSWORD:-admin123}
+      - MINIO_MAIN_USER=${MINIO_MAIN_USER:-main-service}
+      - MINIO_MAIN_PASSWORD=${MINIO_MAIN_PASSWORD:-MainServicePass123!}
+      - MINIO_APP_SAM_USER=${MINIO_APP_SAM_USER:-detection-user-sam}
+      - MINIO_APP_SAM_PASSWORD=${MINIO_APP_SAM_PASSWORD:-DetectionPass123!}
+      - MINIO_APP_YOLO_USER=${MINIO_APP_YOLO_USER:-detection-user-yolo}
+      - MINIO_APP_YOLO_PASSWORD=${MINIO_APP_YOLO_PASSWORD:-DetectionYoloPass123!}
+    volumes:
+      - ./configs/minio-policy-sam.json:/config/minio-policy-sam.json:ro
+      - ./configs/minio-policy-yolo.json:/config/minio-policy-yolo.json:ro
+      - ./configs/minio-policy-main.json:/config/minio-policy-main.json:ro
+      - ./configs/cors-config-minio.json:/config/cors-config-minio.json:ro
+      - ./init.sh:/init.sh:ro
+    entrypoint: ["/bin/sh", "/init.sh"]
+    networks:
+      - ai-net
+
+volumes:
+  minio-storage:
+  minio-config:
+
+networks:
+  ai-net:
+    driver: bridge

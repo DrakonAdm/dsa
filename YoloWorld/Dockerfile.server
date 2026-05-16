@@ -1,0 +1,43 @@
+FROM continuumio/miniconda3:latest
+
+WORKDIR /analyze
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential cmake ninja-build curl unzip zip \
+    software-properties-common libgl1-mesa-glx libglib2.0-0 \
+    libopenblas-dev liblapack-dev libomp-dev && \
+    apt-get clean && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt /analyze/
+
+# Создаем и активируем окружение через mamba
+RUN conda install -y mamba -n base -c conda-forge && \
+    mamba create -n analyze-env python=3.10 pip && \
+    conda clean --all -f -y
+
+# Активируем окружение для дальнейших работы
+SHELL ["conda", "run", "-n", "analyze-env", "/bin/bash", "-c"]
+
+RUN pip install --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt && \
+    pip install torch==2.1.2 torchvision==0.16.2 --extra-index-url https://download.pytorch.org/whl/cpu
+
+COPY . /analyze/
+
+# Добавляем навярняка папку для сохранения кадров
+RUN mkdir -p /analyze/storage/frames
+VOLUME /analyze/storage
+
+RUN pip install --upgrade pip setuptools wheel
+# Место откуда устанавливались собранные pyd и o файлы
+# RUN pip install --prefer-binary mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/cpu/torch2.1/index.html
+RUN pip install -e /analyze/server/analyze/yolo_network/lib/mmcv/
+RUN pip install -e /analyze/server/analyze/yolo_network/lib/mmyolo/
+RUN pip install -e /analyze/server/analyze/yolo_network/YOLOWorld/
+
+# Открываем порт для uvicorn
+EXPOSE 8000
+
+# Команда для запуска приложения
+ENTRYPOINT ["conda", "run", "--no-capture-output", "-n", "analyze-env"]
+CMD ["uvicorn", "app:app", "--host", "0.0.0.0", "--port", "8085"]

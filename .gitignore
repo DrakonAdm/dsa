@@ -1,0 +1,24 @@
+# === ВЕСА МОДЕЛЕЙ (НЕ ОТСЛЕЖИВАТЬ) ===
+YoloWorld/weights/
+SAM2/Grounded-SAM-2/checkpoints/
+SAM2/Grounded-SAM-2/gdino_checkpoints/
+
+# Глобальные маски для тяжёлых файлов
+*.pth *.pt *.bin *.msgpack *.safetensors *.ckpt *.onnx *.gguf
+
+# Стандартные исключения Python/IDE
+__pycache__/
+*.pyc
+*.pyo
+.env
+*.log
+.idea/
+.vscode/
+*.egg-info/
+dist/
+build/
+
+# Архивы и временные файлы (часто случайно попадают)
+*.7z *.zip *.rar *.tar.gz
+*.DS_Store
+Thumbs.db

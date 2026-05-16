@@ -1,0 +1,17 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+
+outputs/
+annotated_image/
+main.py
+
+.git/
+.idea/
+*.iml
+
+*.log
+.env
+!.env.example

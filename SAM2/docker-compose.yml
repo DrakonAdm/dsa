@@ -1,0 +1,40 @@
+version: '1.0'
+
+services:
+  detection-api:
+    build: .
+    container_name: detection-api
+    restart: unless-stopped
+    ports:
+      - "8001:8001"
+    volumes:
+      - ./Grounded-SAM-2:/app/Grounded-SAM-2:ro
+      - ./configs:/app/configs:ro
+      - model-cache:/root/.cache
+    environment:
+      - MINIO_ENDPOINT=minio:9000
+      - MINIO_ACCESS_KEY=miniouser
+      - MINIO_SECRET_KEY=admin123
+      - DEVICE=cuda
+    depends_on:
+      minio:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    networks:
+      - ai-net
+    command: python -m app
+
+volumes:
+  minio-storage:
+  minio-config:
+  model-cache:
+
+networks:
+  ai-net:
+    driver: bridge

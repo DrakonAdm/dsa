@@ -1,0 +1,11 @@
+# Автоматически определять тип файлов, но текстовые нормализовать
+* text=auto
+
+# Shell-скрипты всегда сохранять с LF (даже на Windows)
+*.sh text eol=lf
+
+# Docker-файлы, makefile и т.п. тоже лучше оставить с LF
+*.yml text eol=lf
+*.yaml text eol=lf
+Makefile text eol=lf
+Dockerfile text eol=lf

@@ -1,0 +1,15 @@
+[build-system]
+requires = ["setuptools","wheel","torch"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mmyolo"
+version = "0.6.0"
+
+[tool.setuptools]
+package-dir = {"mmyolo" = "mmyolo"}
+include-package-data = false
+zip-safe = true
+
+[tool.setuptools.packages.find]
+include = ["mmyolo*"]

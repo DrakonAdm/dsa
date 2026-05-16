@@ -1,0 +1,16 @@
+venv/
+.venv/
+__pycache__/
+*.pyc
+
+
+sahi_output/
+main.py
+
+.git/
+.idea/
+*.iml
+
+*.log
+.env
+!.env.example
