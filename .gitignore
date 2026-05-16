@@ -2,6 +2,7 @@
 YoloWorld/weights/
 SAM2/Grounded-SAM-2/checkpoints/
 SAM2/Grounded-SAM-2/gdino_checkpoints/
+minio/output/
 
 # Глобальные маски для тяжёлых файлов
 *.pth *.pt *.bin *.msgpack *.safetensors *.ckpt *.onnx *.gguf
