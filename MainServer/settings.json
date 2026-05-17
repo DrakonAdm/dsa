@@ -14,7 +14,7 @@
   "HOST": "0.0.0.0",
   "PORT": 8085,
   "DB": {
-    "HOST": "localhost",
+    "HOST": "db",
     "PORT": "5432",
     "NAME": "db_dsa",
     "USER": "postgres",
@@ -47,25 +47,25 @@
     {
       "name": "Grounding Dino",
       "type": "sahi_detection",
-      "endpoint_url": "http://localhost:8001/api/v1/detect/grounding-dino",
+      "endpoint_url": "http://sam2-service:8001/api/v1/detect/grounding-dino",
       "is_active": true
     },
     {
       "name": "Grounding Dino",
       "type": "detection",
-      "endpoint_url": "http://localhost:8001/api/v1/detect/grounding-dino-sahi",
+      "endpoint_url": "http://sam2-service:8001/api/v1/detect/grounding-dino-sahi",
       "is_active": true
     },
     {
       "name": "Sam2",
       "type": "segmentation",
-      "endpoint_url": "http://localhost:8001/api/v1/segment/grounded-sam2",
+      "endpoint_url": "http://sam2-service:8001/api/v1/segment/grounded-sam2",
       "is_active": true
     },
     {
       "name": "Sam2",
       "type": "sahi_segmentation",
-      "endpoint_url": "http://localhost:8001/api/v1/segment/grounded-sam2-sahi",
+      "endpoint_url": "http://sam2-service:8001/api/v1/segment/grounded-sam2-sahi",
       "is_active": true
     }
   ],

@@ -84,7 +84,7 @@ class AdminAuthSettings(BaseSettings):
 
 class MinioSettings(BaseSettings):
     """Настройки MinIO"""
-    ENDPOINT: str = "localhost:9000"
+    ENDPOINT: str = "minio:9000"
     ACCESS_KEY: str = "main-service"
     SECRET_KEY: str = "MainServicePass123!"
     BUCKET: str = "images"
@@ -113,7 +113,7 @@ class UserProjectSettings(BaseSettings):
 class AnalyzeSettings(BaseSettings):
     TOKEN_SECRET: str = 'huahcsaca'
     TOKEN_SALT: str = 'djj29xclq043ncqop'
-    CALLBACK_BASE_URL: str = 'http://localhost:8085/api/analyze/analysis'
+    CALLBACK_BASE_URL: str = 'http://main-server:8085/api/analyze/analysis'
     MAX_QUEUE_SIZE: int = 250
     MAX_RETRIES: int = 2
 

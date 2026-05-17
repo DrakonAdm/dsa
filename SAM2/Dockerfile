@@ -1,8 +1,16 @@
-FROM python:3.10-slim
+FROM python:3.11-slim
 
 # Отключаем лишние буферы
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1 \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    && rm -rf /var/lib/apt/lists/*
 
 # Рабочая директория
 WORKDIR /app
@@ -19,7 +27,19 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 
 # Устанавливаем Python зависимости
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip wheel setuptools
+RUN pip install --no-cache-dir \
+    --default-timeout=1000 \
+    --retries 10 \
+    --prefer-binary \
+    --extra-index-url https://download.pytorch.org/whl/cpu \
+    torch==2.11.0 torchvision==0.26.0
+RUN grep -v '^torch' requirements.txt | grep -v '^torchvision' | grep -v '^torchaudio' > requirements-no-torch.txt && \
+    pip install --no-cache-dir \
+        --default-timeout=1000 \
+        --retries 10 \
+        --prefer-binary \
+        -r requirements-no-torch.txt
 
 # Копируем весь проект
 COPY . .

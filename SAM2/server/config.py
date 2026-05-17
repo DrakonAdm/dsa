@@ -3,7 +3,7 @@ from functools import lru_cache
 
 class Settings(BaseSettings):
     # MinIO
-    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ENDPOINT: str = "minio:9000"
     MINIO_ACCESS_KEY: str = "detection-user"
     MINIO_SECRET_KEY: str = "DetectionPass123!"
     MINIO_BUCKET: str = "images"
