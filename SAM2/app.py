@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
             
         print("Все модели предзагружены")
     except Exception as e:
-        print(f"Failed to preload models: {e}")
+        raise(f"Failed to preload models: {e}")
     
     yield
     

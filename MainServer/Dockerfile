@@ -3,10 +3,14 @@ FROM python:3.11-slim
 WORKDIR /app
 
 # Установка системных зависимостей
-RUN apt-get update && apt-get install -y \
-    gcc \
-    postgresql-client \
-    curl \
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender1 \
+    libgomp1 \
+    libxcb1 \
+    libx11-6 \
     && rm -rf /var/lib/apt/lists/*
 
 # Копирование зависимостей (для кэширования слоя)
