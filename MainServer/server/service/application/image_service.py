@@ -179,6 +179,7 @@ class ImageService:
             
             result.append({
                 'id': img.id,
+                "file_path": img.file_path,
                 'width': getattr(img, 'width', None),
                 'height': getattr(img, 'height', None),
                 'format': getattr(img, 'format', None),

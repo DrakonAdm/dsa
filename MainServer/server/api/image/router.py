@@ -17,61 +17,33 @@ router = APIRouter(prefix='/api/image', tags=['Image'])
 @router.post("/{project_id}/images/upload", response_model=List[ImageResponse])
 async def upload_images_endpoint(
     project_id: str,
-    metadata: str = Form(
-        ...,
-        description="JSON строка с метаданными изображений"
-    ),
-    files: List[UploadFile] = File(
-        ...,
-        description="Файлы изображений"
-    ),
-    mask_files: Any = File(
-        default=None,
-        description="Файлы масок"
-    ),
+    files: List[UploadFile] = File(..., description="Файлы изображений"),
+    metadata_json: Optional[str] = Form(None, description="JSON список метаданных изображений"),
+    mask_files: Optional[List[UploadFile]] = File(None, description="Файлы масок (опционально, порядок соответствует маскам в метаданных)"),
     token: str = Depends(get_token),
     db: AsyncSession = Depends(get_database)
 ):
     logger = logging.getLogger("ImageRouter")
     user = await search_check_user(token, logger, db)
-    
-    try:
-        metadata_obj = ListImageLoadRequest.model_validate_json(metadata)
-        metadata_list = metadata_obj.metadata or []
-    except Exception as e:
-        # raise HTTPException(status_code=422, detail=f"Ошибка валидации metadata: {str(e)}")
-        metadata_list = []
+    normalized_mask_files = [file for file in (mask_files or []) if file.filename]
 
-    try:
-        if mask_files is None:
-            mask_files = []
+    if metadata_json and metadata_json.strip():
+        try:
+            raw_metadata = json.loads(metadata_json)
+            if not isinstance(raw_metadata, list):
+                raise ValueError("metadata must be a list")
+            metadata = [ImageUploadRequest(**m) for m in raw_metadata]
+        except Exception:
+            raise HTTPException(status_code=400, detail="Неверный формат JSON в поле metadata")
+    else:
+        if normalized_mask_files:
+            raise HTTPException(status_code=400, detail="Для загрузки масок необходимо передать metadata_json")
+        metadata = [ImageUploadRequest() for _ in files]
+        
+    if len(files) != len(metadata):
+        raise HTTPException(status_code=400, detail="Количество файлов изображений не соответствует количеству метаданных")
 
-        elif not isinstance(mask_files, list):
-            mask_files = [mask_files]
-
-        mask_files = [
-            f for f in mask_files
-            if isinstance(f, UploadFile)
-        ]
-    except Exception as e:
-        mask_files = []
-
-    if len(metadata_list) < len(files):
-        metadata_list.extend([ImageUploadRequest() for _ in range(len(files) - len(metadata_list))])
-    elif len(metadata_list) > len(files):
-        metadata_list = metadata_list[:len(files)]
-
-    mask_files = mask_files or []
-
-    return await ImageService.upload_images(
-        db=db,
-        user=user,
-        project_id=project_id,
-        metadata=metadata_list,
-        files=files,
-        mask_files=mask_files,
-        logger=logger
-    )
+    return await ImageService.upload_images(db, user, project_id, metadata, files, normalized_mask_files, logger)
 
 
 @router.get("/{project_id}/images", response_model=List[ImageResponse])
