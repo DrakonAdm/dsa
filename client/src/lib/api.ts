@@ -38,6 +38,12 @@ export interface Project {
   created_at: string;
 }
 
+export interface ProjectMemberCandidate {
+  email: string;
+  login: string;
+  name_company: string | null;
+}
+
 export interface ModelConfig {
   id: number;
   name: string;
@@ -60,7 +66,27 @@ export interface ProjectImage {
   annotations: Record<string, AnnotationResponse>;
 }
 
-export type AnnotationApiType = 'detection' | 'segmentation';
+export interface ImageUploadMaskMetadata {
+  class_name: string;
+  width?: number | null;
+  height?: number | null;
+  format?: string | null;
+}
+
+export interface ImageUploadMetadata {
+  width: number | null;
+  height: number | null;
+  format: string | null;
+  annotations: AnnotationPayload[];
+  masks: ImageUploadMaskMetadata[];
+}
+
+export interface UploadImagesOptions {
+  metadata?: ImageUploadMetadata[];
+  maskFiles?: File[];
+}
+
+export type AnnotationApiType = 'detect' | 'segment' | 'detection' | 'segmentation';
 
 export interface AnnotationPayload {
   type: AnnotationApiType;
@@ -100,11 +126,22 @@ export interface AnalysisErrorMessage {
   message: string;
 }
 
-export interface ProjectsListResponse {
-  projects: Project[];
+export interface AnalysisSubscribedMessage {
+  type: 'subscribed';
+  image_id: string;
 }
 
-export type AnalysisSocketMessage = AnalysisTaskCreatedMessage | AnalysisTaskUpdateMessage | AnalysisErrorMessage | { type: string;[key: string]: unknown };
+export interface AnalysisPongMessage {
+  type: 'pong';
+}
+
+export type AnalysisSocketMessage =
+  | AnalysisTaskCreatedMessage
+  | AnalysisTaskUpdateMessage
+  | AnalysisErrorMessage
+  | AnalysisSubscribedMessage
+  | AnalysisPongMessage
+  | { type: string; [key: string]: unknown };
 
 export interface ApiErrorPayload {
   detail?: string | { message?: string; error?: string };
@@ -159,16 +196,34 @@ const parseResponse = async <T>(response: Response): Promise<T> => {
   return data as T;
 };
 
-const refreshTokens = async () => {
-  const refreshToken = tokenStorage.getRefresh();
-  if (!refreshToken) {
-    throw new ApiError(401, { detail: 'Не найден refresh token' });
+const unwrapArray = <T>(value: unknown, keys: string[]): T[] => {
+  if (Array.isArray(value)) {
+    return value as T[];
   }
 
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const arrayValue = keys.map((key) => record[key]).find(Array.isArray);
+    return arrayValue ? (arrayValue as T[]) : [];
+  }
+
+  return [];
+};
+
+const unwrapObject = <T>(value: unknown, keys: string[], fallbackMessage: string): T => {
+  if (value && typeof value === 'object') {
+    const record = value as Record<string, unknown>;
+    const nestedValue = keys.map((key) => record[key]).find((item) => item && typeof item === 'object' && !Array.isArray(item));
+    return (nestedValue ?? record) as T;
+  }
+
+  throw new ApiError(500, { detail: fallbackMessage });
+};
+
+const refreshTokens = async () => {
   const response = await fetch(`${API_BASE_URL}/auth/refresh/`, {
     method: 'PUT',
-    credentials: 'include',
-    headers: { 'X-Refresh-Token': refreshToken }
+    credentials: 'include'
   });
   const tokens = await parseResponse<AuthResponse>(response);
   tokenStorage.set(tokens);
@@ -183,7 +238,7 @@ const request = async <T>(path: string, init: RequestInit = {}, retry = true): P
     headers: makeHeaders(init.headers, isFormData)
   });
 
-  if (response.status === 401 && retry && tokenStorage.getRefresh()) {
+  if (response.status === 401 && retry) {
     await refreshTokens();
     return request<T>(path, init, false);
   }
@@ -197,7 +252,7 @@ const requestBlob = async (path: string, retry = true): Promise<Blob> => {
     headers: makeHeaders(undefined, true)
   });
 
-  if (response.status === 401 && retry && tokenStorage.getRefresh()) {
+  if (response.status === 401 && retry) {
     await refreshTokens();
     return requestBlob(path, false);
   }
@@ -224,13 +279,24 @@ const startAnalysisViaWebSocket = (payload: {
     }
 
     const socket = new WebSocket(`${getWebSocketBaseUrl()}/api/analyze/analysis?token=${encodeURIComponent(token)}`);
+    let hasStartedAnalysis = false;
     const timeout = window.setTimeout(() => {
       socket.close();
       reject(new Error('Таймаут ожидания результата анализа'));
     }, 120_000);
 
-    socket.addEventListener('open', () => {
-      socket.send(JSON.stringify({ cmd: 'subscribe', image_id: payload.imageId }));
+    const fail = (error: Error) => {
+      window.clearTimeout(timeout);
+      socket.close();
+      reject(error);
+    };
+
+    const sendStartAnalysis = () => {
+      if (hasStartedAnalysis) {
+        return;
+      }
+
+      hasStartedAnalysis = true;
       socket.send(
         JSON.stringify({
           cmd: 'start_analysis',
@@ -239,16 +305,32 @@ const startAnalysisViaWebSocket = (payload: {
           class_type_ids: payload.classTypeIds
         })
       );
+    };
+
+    socket.addEventListener('open', () => {
+      socket.send(JSON.stringify({ cmd: 'subscribe', image_id: payload.imageId }));
     });
 
     socket.addEventListener('message', (event) => {
-      const message = JSON.parse(event.data) as AnalysisSocketMessage;
+      let message: AnalysisSocketMessage;
+
+      try {
+        message = JSON.parse(event.data) as AnalysisSocketMessage;
+      } catch {
+        fail(new Error('WebSocket вернул некорректный JSON'));
+        return;
+      }
+
       payload.onMessage?.(message);
 
+      if (message.type === 'subscribed' && (message as AnalysisSubscribedMessage).image_id === payload.imageId) {
+        sendStartAnalysis();
+        return;
+      }
+
       if (message.type === 'error') {
-        window.clearTimeout(timeout);
-        socket.close();
-        reject(new Error((message as AnalysisErrorMessage).message));
+        fail(new Error((message as AnalysisErrorMessage).message));
+        return;
       }
 
       if (message.type === 'task_update') {
@@ -259,16 +341,13 @@ const startAnalysisViaWebSocket = (payload: {
           resolve(update);
         }
         if (update.event === 'failed') {
-          window.clearTimeout(timeout);
-          socket.close();
-          reject(new Error(update.error ?? 'Анализ завершился ошибкой'));
+          fail(new Error(update.error ?? 'Анализ завершился ошибкой'));
         }
       }
     });
 
     socket.addEventListener('error', () => {
-      window.clearTimeout(timeout);
-      reject(new Error('WebSocket анализа недоступен'));
+      fail(new Error('WebSocket анализа недоступен'));
     });
   });
 
@@ -298,40 +377,63 @@ export const api = {
     }
   },
 
+  refreshSession: refreshTokens,
+
   getMe: () => request<UserBase>('/user/me/'),
   getDefinitionMe: () => request<UserDefinition>('/user/about/me'),
 
-  listProjects: async () => {
-    const response = await request<ProjectsListResponse>('/projects/');
-    return response.projects;
-  },
+  listProjects: async () => unwrapArray<Project>(await request<unknown>('/projects/'), ['projects', 'items', 'data', 'results']),
   createProject: (name: string) =>
-    request<Project>('/projects/', {
+    request<unknown>('/projects/', {
       method: 'POST',
       body: JSON.stringify({ name })
-    }),
+    }).then((value) => unwrapObject<Project>(value, ['project', 'item', 'data', 'result'], 'Не удалось создать проект.')),
   deleteProject: (projectId: string) => request<{ detail: string }>(`/projects/${projectId}`, { method: 'DELETE' }),
+  searchProjectUsers: async (query: string, limit = 8) =>
+    unwrapArray<ProjectMemberCandidate>(
+      await request<unknown>(`/projects/users/search?q=${encodeURIComponent(query)}&limit=${limit}`),
+      ['users', 'items', 'data', 'results']
+    ),
+  addProjectMember: (projectId: string, value: string) => {
+    const trimmedValue = value.trim();
+    const payload = trimmedValue.includes('@') ? { email: trimmedValue } : { login: trimmedValue };
 
-  getProjectModels: (projectId: string) => request<ModelConfig[]>(`/projects/${projectId}/models`),
-  getProjectClasses: (projectId: string) => request<ClassType[]>(`/projects/${projectId}/classes`),
+    return request<{ detail: string }>(`/projects/${projectId}/members`, {
+      method: 'POST',
+      body: JSON.stringify(payload)
+    });
+  },
+
+  getProjectModels: async (projectId: string) =>
+    unwrapArray<ModelConfig>(await request<unknown>(`/projects/${projectId}/models`), ['models', 'items', 'data', 'results']),
+  getProjectClasses: async (projectId: string) =>
+    unwrapArray<ClassType>(await request<unknown>(`/projects/${projectId}/classes`), ['classes', 'items', 'data', 'results']),
   createProjectClass: (projectId: string, name: string) =>
     request<ClassType>(`/projects/${projectId}/classes`, {
       method: 'POST',
       body: JSON.stringify({ name_eng: name })
     }),
-  getProjectImages: (projectId: string) => request<ProjectImage[]>(`/image/${projectId}/images`),
+  deleteProjectClass: (projectId: string, classTypeId: string) =>
+    request<{ detail: string }>(`/projects/${projectId}/classes/${classTypeId}`, { method: 'DELETE' }),
+  getProjectImages: async (projectId: string) =>
+    unwrapArray<ProjectImage>(await request<unknown>(`/image/${projectId}/images`), ['images', 'items', 'data', 'results']),
   getImageObjectUrl: async (projectId: string, imageId: string) => {
     const blob = await requestBlob(`/image/${projectId}/images/${imageId}/download`);
     return URL.createObjectURL(blob);
   },
 
-  getAnnotations: (projectId: string, imageId: string) =>
-    request<AnnotationResponse[]>(`/annotations/${projectId}/images/${imageId}`),
-  runModels: (projectId: string, imageId: string, modelIds: number[], className: string) =>
-    request<AnnotationResponse[]>(`/models/${projectId}/images/${imageId}/run`, {
+  getAnnotations: async (projectId: string, imageId: string) =>
+    unwrapArray<AnnotationResponse>(await request<unknown>(`/annotations/${projectId}/images/${imageId}`), [
+      'annotations',
+      'items',
+      'data',
+      'results'
+    ]),
+  runModels: async (projectId: string, imageId: string, modelIds: number[], className: string) =>
+    unwrapArray<AnnotationResponse>(await request<unknown>(`/models/${projectId}/images/${imageId}/run`, {
       method: 'POST',
       body: JSON.stringify({ model_ids: modelIds, class_name: className })
-    }),
+    }), ['annotations', 'items', 'data', 'results']),
   startAnalysisViaWebSocket,
   createAnnotation: (projectId: string, imageId: string, payload: AnnotationPayload) =>
     request<AnnotationResponse>(`/annotations/${projectId}/images/${imageId}`, {
@@ -348,17 +450,21 @@ export const api = {
       method: 'DELETE'
     }),
 
-  uploadImages: (projectId: string, files: File[]) => {
+  uploadImages: async (projectId: string, files: File[], options: UploadImagesOptions = {}) => {
     const formData = new FormData();
-    formData.append(
-      'metadata_json',
-      JSON.stringify(files.map((file) => ({ format: file.type.split('/')[1] ?? file.name.split('.').pop() ?? null })))
-    );
+
     files.forEach((file) => formData.append('files', file));
-    return request<ProjectImage[]>(`/image/${projectId}/images/upload`, {
+
+    if (options.metadata) {
+      formData.append('metadata_json', JSON.stringify(options.metadata));
+    }
+
+    options.maskFiles?.forEach((file) => formData.append('mask_files', file));
+
+    return request<unknown>(`/image/${projectId}/images/upload`, {
       method: 'POST',
       body: formData
-    });
+    }).then((value) => unwrapArray<ProjectImage>(value, ['images', 'items', 'data', 'results', 'uploaded']));
   },
 
   imageDownloadUrl: (projectId: string, imageId: string) => `${API_BASE_URL}/image/${projectId}/images/${imageId}/download`

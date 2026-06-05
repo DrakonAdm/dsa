@@ -1,7 +1,8 @@
 import { Link, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Bell, CreditCard, Database, LogOut, Menu, Settings, User, Workflow, X } from 'lucide-react';
-import { useState } from 'react';
+import { Bell, CreditCard, Database, FolderKanban, LogOut, Menu, Settings, User, Workflow, X } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { api, type UserBase } from '../lib/api';
 
 const navItems = [
   { label: 'Проекты', path: '/projects' },
@@ -13,11 +14,10 @@ const navItems = [
 ];
 
 const mobileItems = [
-  { label: 'Дашборд', path: '/dashboard', icon: Workflow },
-  { label: 'Датасеты', path: '/projects', icon: Database },
+  { label: 'Проекты', path: '/projects', icon: FolderKanban },
+  { label: 'Датасеты', path: '/upload', icon: Database },
   { label: 'Рабочая область', path: '/workspace', icon: Workflow },
   { label: 'Оплата', path: '/billing', icon: CreditCard },
-  { label: 'Загрузка', path: '/upload', icon: Database },
   { label: 'Модели', path: '/models', icon: Workflow },
   { label: 'Профиль', path: '/profile', icon: User }
 ];
@@ -25,6 +25,28 @@ const mobileItems = [
 const TopNav = () => {
   const location = useLocation();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [user, setUser] = useState<UserBase | null>(null);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    api
+      .getMe()
+      .then((userData) => {
+        if (isMounted) {
+          setUser(userData);
+        }
+      })
+      .catch(() => {
+        if (isMounted) {
+          setUser(null);
+        }
+      });
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/90 backdrop-blur-xl">
@@ -37,7 +59,7 @@ const TopNav = () => {
           >
             {isMobileMenuOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
-          <Link to="/dashboard">
+          <Link to="/projects">
             <motion.div
               className="rounded-xl bg-brand-500/15 px-3 py-1.5 text-sm font-medium text-brand-100 ring-1 ring-brand-500/20"
               whileHover={{ scale: 1.05 }}
@@ -81,7 +103,7 @@ const TopNav = () => {
             whileTap={{ scale: 0.98 }}
           >
             <User size={16} />
-            <span>Артем</span>
+            <span>{user?.login ?? 'Профиль'}</span>
           </motion.button>
           <motion.button
             className="rounded-xl border border-slate-800 bg-slate-900/80 p-1.5 text-slate-300 transition hover:bg-slate-800"

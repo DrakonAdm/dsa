@@ -3,16 +3,24 @@ import { useEffect, useState } from 'react';
 import PageTransition from '../components/PageTransition';
 import { api, type UserBase, type UserDefinition } from '../lib/api';
 
+const subscriptionLimits = [
+  { label: 'Форматы', value: 'JPG / PNG бесплатно, TIFF — по подписке' },
+  { label: 'Параллельные задачи', value: 'до 4' },
+  { label: 'Остаток кадров', value: '120' },
+  { label: 'Подписка', value: 'Base' }
+];
+
 const ProfilePage = () => {
   const [user, setUser] = useState<UserBase | null>(null);
   const [definition, setDefinition] = useState<UserDefinition | null>(null);
   const [status, setStatus] = useState('');
 
   useEffect(() => {
-    Promise.all([api.getMe(), api.getDefinitionMe()])
-      .then(([userData, definitionData]) => {
+    api
+      .getMe()
+      .then((userData) => {
         setUser(userData);
-        setDefinition(definitionData);
+        setDefinition({ name_company: null, definition: null });
       })
       .catch((err) => setStatus(err instanceof Error ? err.message : 'Не удалось загрузить профиль.'));
   }, []);
@@ -51,18 +59,19 @@ const ProfilePage = () => {
               </div>
             </motion.div>
             <motion.div className="rounded-[2rem] border border-slate-800 bg-slate-950/90 p-6" initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }}>
-              <h2 className="text-xl font-semibold text-white">История задач</h2>
+              <h2 className="text-xl font-semibold text-white">Лимиты подписки</h2>
               <div className="mt-5 space-y-4">
-                {['Сессия авторизации активна', 'Проекты синхронизируются с backend', 'Загрузки отправляются через API'].map((item, idx) => (
+                {subscriptionLimits.map((item, idx) => (
                   <motion.div
-                    key={item}
+                    key={item.label}
                     className="rounded-3xl border border-slate-800 bg-slate-900/80 p-4 text-slate-200"
                     whileHover={{ scale: 1.02, x: 5 }}
                     initial={{ opacity: 0, x: 20 }}
                     animate={{ opacity: 1, x: 0 }}
                     transition={{ delay: idx * 0.1 }}
                   >
-                    {item}
+                    <div className="text-sm text-slate-400">{item.label}</div>
+                    <div className="mt-2 text-lg font-semibold text-white">{item.value}</div>
                   </motion.div>
                 ))}
               </div>
