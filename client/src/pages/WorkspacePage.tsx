@@ -1260,27 +1260,27 @@ const WorkspacePage = () => {
     } catch (err) {
       setStatusMessage(err instanceof Error ? `WebSocket не прошёл, пробуем REST: ${err.message}` : 'WebSocket не прошёл, пробуем REST');
 
-      try {
-        const annotations = await api.runModels(selectedProjectId, currentImageId, [selectedModelId], selectedClassNames[0]);
-        const generated = annotations.map(annotationFromApi);
+      // try {
+      //   const annotations = await api.runModels(selectedProjectId, currentImageId, [selectedModelId], selectedClassNames[0]);
+      //   const generated = annotations.map(annotationFromApi);
 
-        updateWorkspace(
-          (current) => ({
-            ...current,
-            images: current.images.map((image, index) =>
-              index === current.currentImageIndex
-                ? { ...image, annotations: mergeAnnotationObjects(generated, image.annotations) }
-                : image
-            ),
-            selectedObjectId: generated[0]?.id ?? current.selectedObjectId
-          }),
-          { status: `REST fallback вернул авторазметку: ${generated.length}` }
-        );
-      } catch (fallbackErr) {
-        setStatusMessage(
-          fallbackErr instanceof Error ? `Не удалось запустить модели: ${fallbackErr.message}` : 'Не удалось запустить модели'
-        );
-      }
+      //   updateWorkspace(
+      //     (current) => ({
+      //       ...current,
+      //       images: current.images.map((image, index) =>
+      //         index === current.currentImageIndex
+      //           ? { ...image, annotations: mergeAnnotationObjects(generated, image.annotations) }
+      //           : image
+      //       ),
+      //       selectedObjectId: generated[0]?.id ?? current.selectedObjectId
+      //     }),
+      //     { status: `REST fallback вернул авторазметку: ${generated.length}` }
+      //   );
+      // } catch (fallbackErr) {
+      //   setStatusMessage(
+      //     fallbackErr instanceof Error ? `Не удалось запустить модели: ${fallbackErr.message}` : 'Не удалось запустить модели'
+      //   );
+      // }
     } finally {
       setIsRunningModels(false);
     }

@@ -71,3 +71,8 @@ uvicorn==0.44.0
 wheel==0.46.3
 wrapt==2.1.2
 WTForms==3.1.2
+
+httptools==0.8.0 
+pyyaml==6.0.3 
+watchfiles==1.2.0 
+websockets==16.0
