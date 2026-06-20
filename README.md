@@ -3,7 +3,7 @@
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=flat&logo=python&logoColor=white)](https://www.python.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.136.0-009688?style=flat&logo=fastapi)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18.2.0-61DAFB?style=flat&logo=react&logoColor=black)](https://react.dev/)
-[![License](https://img.shields.io/badge/License-Private-red?style=flat)](#)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=flat)](https://opensource.org/licenses/MIT)(#)
 
 > **DSA** — система распределённой сегментации и анализа изображений на базе современных нейросетевых моделей (SAM2, Yolo-World).
 
@@ -159,7 +159,7 @@ docker-compose down
 
 ## 📄 Лицензия
 
-Проект является частной разработкой. Использование, копирование и распространение кода без разрешения запрещено.
+Этот проект распространяется под лицензией [MIT](LICENSE).
 
 ---
 
