@@ -52,8 +52,8 @@ class HandleMaskService:
             points = approx.reshape(-1, 2).tolist()
             
             # Нормализация координат
-            norm_points = [[round(x / w, 6), round(y / h, 6)] for x, y in points]
-            polygons.append(norm_points)
+            # norm_points = [[round(x / w, 6), round(y / h, 6)] for x, y in points]
+            polygons.append(points)
             
         return polygons
     

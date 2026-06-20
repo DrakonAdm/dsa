@@ -80,7 +80,7 @@ const App = () => {
       <main
         className={
           location.pathname.startsWith('/workspace')
-            ? 'app-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-6 pt-4 xl:px-12'
+            ? 'min-h-0 flex-1 overflow-hidden'
             : 'app-scroll min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 py-5 xl:px-12'
         }
       >

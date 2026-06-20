@@ -45,10 +45,10 @@ async def analysis_websocket(
     
     Ответы сервера (отправляются в сессию):
     
-    • {"type": "task_created", "task_id": "uuid", "status": "queued"}
-    • {"type": "task_update", "task_id": "uuid", "event": "processing|completed|failed", ...}
-    • {"type": "error", "message": "..."}
-    • {"type": "pong"}
+    - {"type": "task_created", "task_id": "uuid", "status": "queued"}
+    - {"type": "task_update", "task_id": "uuid", "event": "processing|completed|failed", ...}
+    - {"type": "error", "message": "..."}
+    - {"type": "pong"}
     """
     
     # Аутентификация

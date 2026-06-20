@@ -27,6 +27,7 @@ class CallbackService:
             True если отправка успешна, False если все попытки исчерпаны.
         """
         headers = {
+            "X-Internal-Service-Token": settings.INTERNAL_SERVICE_TOKEN,
             "Content-Type": "application/json",
             "X-Request-ID": request_id or "",
         }

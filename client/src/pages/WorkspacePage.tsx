@@ -1,5 +1,6 @@
 import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import JSZip from 'jszip';
 import PageTransition from '../components/PageTransition';
 import WorkspaceCanvas, {
   type ActiveToolMode,
@@ -207,8 +208,13 @@ const mergeAnnotationObjects = (primary: AnnotationObject[], fallback: Annotatio
   return Array.from(byId.values());
 };
 
+const getClassDisplayName = (classType: ClassType) => classType.name_ru || classType.name_eng;
+
+const classTypeMatchesName = (classType: ClassType, name: string) =>
+  [classType.name_ru, classType.name_eng].some((value) => value.toLowerCase() === name.toLowerCase());
+
 const classItemFromApi = (classType: ClassType): ClassItem => ({
-  name: classType.name_eng || classType.name_ru,
+  name: getClassDisplayName(classType),
   source: 'imported',
   color: '#7CFC8A',
   visible: true
@@ -429,7 +435,7 @@ const WorkspacePage = () => {
         const classList = [
           ...projectClasses.map(classItemFromApi),
           ...Array.from(new Set(remoteImages.flatMap((image) => image.annotations.map((item) => item.label))))
-            .filter((name) => !projectClasses.some((classType) => classType.name_eng === name || classType.name_ru === name))
+            .filter((name) => !projectClasses.some((classType) => classTypeMatchesName(classType, name)))
             .map<ClassItem>((name) => ({
               name,
               source: 'imported',
@@ -438,7 +444,7 @@ const WorkspacePage = () => {
             }))
         ];
         const activeLabel =
-          remoteImages[0]?.annotations[0]?.label ?? projectClasses[0]?.name_eng ?? projectClasses[0]?.name_ru ?? '';
+          remoteImages[0]?.annotations[0]?.label ?? (projectClasses[0] ? getClassDisplayName(projectClasses[0]) : '');
         const defaultModel = projectModels.find((model) => model.type.includes('segmentation') || model.type.includes('detection'));
 
         const nextState: WorkspaceState = {
@@ -569,34 +575,151 @@ const WorkspacePage = () => {
     setIsMenuOpen(false);
   };
 
-  const handleExportProject = () => {
-    const blob = new Blob(
-      [
-        JSON.stringify(
-          {
-            projectName: workspace.projectName,
-            taskName: workspace.taskName,
-            images: workspace.images.map((image) => ({
-              name: image.name,
-              annotations: image.annotations
-            })),
-            classList: workspace.classList,
-            selectedSegmentationModels: workspace.selectedSegmentationModels,
-            selectedDetectionModels: workspace.selectedDetectionModels
-          },
-          null,
-          2
-        )
-      ],
-      { type: 'application/json' }
-    );
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${workspace.projectName.replace(/\s+/g, '-').toLowerCase() || 'seglabel-project'}.json`;
-    link.click();
-    URL.revokeObjectURL(url);
-    setStatusMessage('Проект экспортирован в JSON');
+  const getImageData = async (src: string): Promise<{ blob: Blob; width: number; height: number }> => {
+    let blob: Blob;
+    try {
+      const response = await fetch(src);
+      if (!response.ok) throw new Error('Network response was not ok');
+      blob = await response.blob();
+    } catch (error) {
+      throw new Error(`Не удалось загрузить изображение (возможно, проблема с CORS): ${src}`);
+    }
+
+    const objectUrl = URL.createObjectURL(blob);
+    const img = new Image();
+    img.src = objectUrl;
+
+    await new Promise<void>((resolve, reject) => {
+      img.onload = () => resolve();
+      img.onerror = () => reject(new Error('Ошибка декодирования изображения'));
+    });
+
+    const width = img.naturalWidth;
+    const height = img.naturalHeight;
+    URL.revokeObjectURL(objectUrl);
+
+    return { blob, width, height };
+  };
+
+  const handleExportProject = async () => {
+    setStatusMessage('Начинается подготовка экспорта в формате COCO...');
+
+    try {
+      const zip = new JSZip();
+      const imgFolder = zip.folder('images');
+
+      const categories: CocoCategory[] = workspace.classList.map((cls, index) => ({
+        id: index + 1,
+        name: cls.name,
+      }));
+
+      const categoryMap = new Map(categories.map(c => [c.name, c.id]));
+
+      const cocoImages: CocoImage[] = [];
+      const cocoAnnotations: CocoAnnotation[] = [];
+      let annotationId = 1;
+
+      // 2. Обрабатываем изображения и аннотации
+      for (let i = 0; i < workspace.images.length; i++) {
+        const image = workspace.images[i];
+        const imageId = i + 1;
+
+        setStatusMessage(`Обработка ${i + 1} из ${workspace.images.length}: ${image.name}...`);
+
+        try {
+          const { blob, width, height } = await getImageData(image.src);
+          cocoImages.push({
+            id: imageId,
+            file_name: image.name,
+            width: width,
+            height: height,
+          });
+
+          // Маппинг аннотаций
+          image.annotations.forEach((ann) => {
+            const categoryId = categoryMap.get(ann.label) || 1;
+            
+            const cocoAnn: any = {
+              id: annotationId++,
+              image_id: imageId,
+              category_id: categoryId,
+              iscrowd: 0,
+            };
+
+            if (ann.type === 'box' && ann.area) {
+              cocoAnn.bbox = [ann.area.x, ann.area.y, ann.area.width, ann.area.height];
+              cocoAnn.area = ann.area.width * ann.area.height;
+            } 
+            
+            else if (ann.type === 'polygon' && ann.points && ann.points.length >= 3) {
+              const flatPoints = ann.points.flatMap(p => [p.x, p.y]);
+              cocoAnn.segmentation = [flatPoints];
+              
+              let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+              ann.points.forEach(p => {
+                if (p.x < minX) minX = p.x;
+                if (p.y < minY) minY = p.y;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y > maxY) maxY = p.y;
+              });
+              cocoAnn.bbox = [minX, minY, maxX - minX, maxY - minY];
+              let area = 0;
+              const n = ann.points.length;
+              for (let j = 0; j < n; j++) {
+                const p1 = ann.points[j];
+                const p2 = ann.points[(j + 1) % n];
+                area += p1.x * p2.y - p2.x * p1.y;
+              }
+              cocoAnn.area = Math.abs(area) / 2;
+            }
+            else if (ann.type === 'brush' && ann.area) {
+              cocoAnn.bbox = [ann.area.x, ann.area.y, ann.area.width, ann.area.height];
+              cocoAnn.area = ann.area.width * ann.area.height;
+            }
+            if (cocoAnn.bbox || cocoAnn.segmentation) {
+              cocoAnnotations.push(cocoAnn);
+            }
+          });
+
+          // Добавляем само изображение в ZIP
+          imgFolder?.file(image.name, blob);
+
+        } catch (err) {
+          console.error(`Пропуск изображения ${image.name}:`, err);
+        }
+      }
+
+      const cocoDataset = {
+        info: {
+          description: workspace.projectName,
+          version: '1.0',
+          year: new Date().getFullYear(),
+          date_created: new Date().toISOString()
+        },
+        images: cocoImages,
+        annotations: cocoAnnotations,
+        categories: categories
+      };
+
+      zip.file('annotations.json', JSON.stringify(cocoDataset, null, 2));
+
+      setStatusMessage('Упаковка архива...');
+      const zipBlob = await zip.generateAsync({ type: 'blob' });
+      const url = URL.createObjectURL(zipBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      
+      const fileName = `${workspace.projectName.replace(/\s+/g, '-').toLowerCase() || 'coco-dataset'}.zip`;
+      link.download = fileName;
+      link.click();
+      
+      URL.revokeObjectURL(url);
+      setStatusMessage(`Проект успешно экспортирован (${fileName})`);
+
+    } catch (error) {
+      console.error('Критическая ошибка экспорта:', error);
+      setStatusMessage('Ошибка при экспорте проекта');
+    }
   };
 
   const handleImageUpload = async (event: ChangeEvent<HTMLInputElement>) => {
@@ -751,7 +874,7 @@ const WorkspacePage = () => {
 
   const ensureRemoteClass = async (projectId: string, label: string) => {
     const exists =
-      availableClasses.some((item) => item.name_eng.toLowerCase() === label.toLowerCase() || item.name_ru.toLowerCase() === label.toLowerCase()) ||
+      availableClasses.some((item) => classTypeMatchesName(item, label)) ||
       workspace.classList.some((item) => item.name.toLowerCase() === label.toLowerCase() && item.source !== 'manual');
 
     if (exists) {
@@ -1051,7 +1174,7 @@ const WorkspacePage = () => {
   };
 
   const deleteClass = async (name: string) => {
-    const remoteClass = availableClasses.find((item) => item.name_eng === name || item.name_ru === name);
+    const remoteClass = availableClasses.find((item) => classTypeMatchesName(item, name));
 
     if (selectedProjectId && remoteClass) {
       setStatusMessage(`Удаляем класс ${name} на сервере...`);
@@ -1180,10 +1303,7 @@ const WorkspacePage = () => {
       .map((model) => model.name);
     const selectedModelId = selectedModelIds[0];
     let classTypeIds = availableClasses
-      .filter((classType) => {
-        const className = classType.name_eng || classType.name_ru;
-        return selectedClassNames.includes(className);
-      })
+      .filter((classType) => selectedClassNames.some((name) => classTypeMatchesName(classType, name)))
       .map((classType) => classType.id);
 
     if (!selectedModelIds.length) {
@@ -1231,7 +1351,7 @@ const WorkspacePage = () => {
         const refreshedClasses = await api.getProjectClasses(selectedProjectId);
         setAvailableClasses(refreshedClasses);
         classTypeIds = refreshedClasses
-          .filter((classType) => selectedClassNames.includes(classType.name_eng || classType.name_ru))
+          .filter((classType) => selectedClassNames.some((name) => classTypeMatchesName(classType, name)))
           .map((classType) => classType.id);
       }
 
@@ -1260,27 +1380,27 @@ const WorkspacePage = () => {
     } catch (err) {
       setStatusMessage(err instanceof Error ? `WebSocket не прошёл, пробуем REST: ${err.message}` : 'WebSocket не прошёл, пробуем REST');
 
-      // try {
-      //   const annotations = await api.runModels(selectedProjectId, currentImageId, [selectedModelId], selectedClassNames[0]);
-      //   const generated = annotations.map(annotationFromApi);
+      try {
+        const annotations = await api.runModels(selectedProjectId, currentImageId, [selectedModelId], selectedClassNames[0]);
+        const generated = annotations.map(annotationFromApi);
 
-      //   updateWorkspace(
-      //     (current) => ({
-      //       ...current,
-      //       images: current.images.map((image, index) =>
-      //         index === current.currentImageIndex
-      //           ? { ...image, annotations: mergeAnnotationObjects(generated, image.annotations) }
-      //           : image
-      //       ),
-      //       selectedObjectId: generated[0]?.id ?? current.selectedObjectId
-      //     }),
-      //     { status: `REST fallback вернул авторазметку: ${generated.length}` }
-      //   );
-      // } catch (fallbackErr) {
-      //   setStatusMessage(
-      //     fallbackErr instanceof Error ? `Не удалось запустить модели: ${fallbackErr.message}` : 'Не удалось запустить модели'
-      //   );
-      // }
+        updateWorkspace(
+          (current) => ({
+            ...current,
+            images: current.images.map((image, index) =>
+              index === current.currentImageIndex
+                ? { ...image, annotations: mergeAnnotationObjects(generated, image.annotations) }
+                : image
+            ),
+            selectedObjectId: generated[0]?.id ?? current.selectedObjectId
+          }),
+          { status: `REST fallback вернул авторазметку: ${generated.length}` }
+        );
+      } catch (fallbackErr) {
+        setStatusMessage(
+          fallbackErr instanceof Error ? `Не удалось запустить модели: ${fallbackErr.message}` : 'Не удалось запустить модели'
+        );
+      }
     } finally {
       setIsRunningModels(false);
     }
@@ -1297,9 +1417,9 @@ const WorkspacePage = () => {
         className="hidden"
       />
 
-      <div className="mx-auto max-w-[1720px] px-4 pb-6 pt-4">
-        <div className="min-w-0">
-          <section className="min-h-0 min-w-0">
+      <div className="h-full min-h-0 min-w-0">
+        <div className="h-full min-h-0 min-w-0">
+          <section className="h-full min-h-0 min-w-0">
             <WorkspaceCanvas
               activeTool={workspace.activeTool}
               onToolChange={(tool) =>

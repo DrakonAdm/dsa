@@ -123,6 +123,7 @@ class Settings(BaseSettings):
     HOST: str
     PORT: int
     PROJECT_NAME: str = "Detection Segmentation Anything Server"
+    INTERNAL_SERVICE_TOKEN: str
     
     # Вложенные секции из JSON
     DB: DBSettings

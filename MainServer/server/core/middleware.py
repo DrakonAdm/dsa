@@ -14,6 +14,7 @@ EXCLUDED_AUTH_PATHS = frozenset([
     '/api/auth/register', 
     '/api/auth/refresh',
     '/api/auth/change',
+    '/api/analyze/analysis'
     '/docs',
     '/openapi.json',
     '/redoc',

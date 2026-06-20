@@ -4,7 +4,10 @@ from fastapi import Request
 from server.service.dal.repositories import CacheObjectClassesRepository
 import logging
 
+from server.core.config import settings
+
 logger = logging.getLogger("InternalAuth")
+
 
 class InternalServiceAuth:
     """
@@ -90,8 +93,8 @@ class InternalServiceAuth:
             return True
         
         """Удалить !!!"""
-        if client_host in '127.0.0.1':
-            return True
+        # if client_host == '127.0.0.1':
+        #     return True
         
         # проверка по заголовку Referer/Origin (если микросервис его шлёт)
         referer = request.headers.get("referer") or request.headers.get("origin")
@@ -101,9 +104,9 @@ class InternalServiceAuth:
                 return True
         
         # проверка по кастомному заголовку (двухфакторная аутентификация)
-        # internal_token = request.headers.get("X-Internal-Service-Token")
-        # if internal_token and internal_token == settings.INTERNAL_SERVICE_TOKEN:
-        #     return True
+        internal_token = request.headers.get("X-Internal-Service-Token")
+        if internal_token and internal_token == settings.INTERNAL_SERVICE_TOKEN:
+            return True
         
         return False
     
